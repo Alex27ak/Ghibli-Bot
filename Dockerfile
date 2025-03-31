@@ -15,6 +15,7 @@ WORKDIR /app
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir torch==1.12.1+cu113 -f https://download.pytorch.org/whl/torch_stable.html
 
 # Manually install AnimeGANv2
 RUN git clone https://github.com/TachibanaYoshino/AnimeGANv2.git && \
