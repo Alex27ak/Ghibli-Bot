@@ -6,10 +6,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from AnimeGANv2 import AnimeGAN
 import cv2
 import sys
-sys.path.append('/app/AnimeGANv2')
+sys.path.append('/app')
 
 # Then import like this:
 from AnimeGANv2.model import AnimeGANv2 as AnimeGAN
+
 
 # Configure logging
 logging.basicConfig(
