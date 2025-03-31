@@ -12,16 +12,17 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# First copy requirements to cache dependencies
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Manually install AnimeGANv2
 RUN git clone https://github.com/TachibanaYoshino/AnimeGANv2.git && \
-    cp -r AnimeGANv2/AnimeGANv2 ./AnimeGANv2 && \
+    mkdir -p AnimeGANv2 && \
+    cp -r AnimeGANv2/AnimeGANv2/* ./AnimeGANv2/ && \
     rm -rf AnimeGANv2
 
-# Copy the rest of the application
+# Copy application files
 COPY . .
 
 CMD ["python", "main.py"]
