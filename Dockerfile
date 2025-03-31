@@ -1,5 +1,4 @@
-# Base image
-FROM python:3.9-slim as builder
+FROM python:3.9-slim
 
 # Install system dependencies
 RUN apt-get update && \
@@ -12,26 +11,17 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# First copy requirements to cache dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --user -r requirements.txt
+# Manually install AnimeGANv2
+RUN git clone https://github.com/TachibanaYoshino/AnimeGANv2.git && \
+    cp -r AnimeGANv2/AnimeGANv2 ./AnimeGANv2 && \
+    rm -rf AnimeGANv2
 
-# Runtime image
-FROM python:3.9-slim
-
-# Copy installed packages
-COPY --from=builder /root/.local /root/.local
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 /usr/lib/x86_64-linux-gnu/
-
-WORKDIR /app
+# Copy the rest of the application
 COPY . .
-
-# Ensure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
-
-# Run as non-root user
-USER 1000
 
 CMD ["python", "main.py"]
