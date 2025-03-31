@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Model Configuration
-MODEL_URL = "https://drive.google.com/uc?export=download&id=1kCJKNfzCrvEvlfTqtfTqMYMonYpQwMle""  # Replace with your actual model URL
+MODEL_URL = "https://drive.google.com/uc?export=download&id=1kCJKNfzCrvEvlfTqtfTqMYMonYpQwMle"  # Replace with your actual model URL
 MODEL_PATH = "ghibli_model.pth"
 
 # Your private channel ID (ensure your bot is an admin in this channel)
