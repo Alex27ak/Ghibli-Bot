@@ -1,10 +1,22 @@
-FROM python:3.9-slim
+# Stage 1: Builder to install dependencies
+FROM python:3.9-alpine AS builder
 
 WORKDIR /app
 
-COPY requirements.txt .  
-RUN pip install --no-cache-dir -r requirements.txt  
+# Install necessary system dependencies
+RUN apk add --no-cache libjpeg-turbo-dev zlib-dev gcc musl-dev
 
-COPY . .  
+# Copy and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Final lightweight image
+FROM python:3.9-alpine
+
+WORKDIR /app
+
+# Copy installed dependencies from the builder stage
+COPY --from=builder /usr/local /usr/local
+COPY . .
 
 CMD ["python", "main.py"]
