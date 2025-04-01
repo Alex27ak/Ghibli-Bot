@@ -1,8 +1,7 @@
 python-telegram-bot
 torch
-torchvision
-opencv-python
-numpy
 Pillow
 flask
 requests
+safetensors
+tqdm
