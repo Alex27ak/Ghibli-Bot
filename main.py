@@ -14,7 +14,7 @@ from torchvision import transforms
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")  # Add your private channel ID in .env
 
 # Load Model
-MODEL_PATH = "models/ghibli_model.pth"
+MODEL_PATH = "models/ghibli_grain.pth"
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model file '{MODEL_PATH}' not found!")
