@@ -46,7 +46,7 @@ def download_model():
 def load_model():
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model file '{MODEL_PATH}' not found!")
-    model = torch.load(MODEL_PATH, map_location=torch.device('cpu'))
+    model = torch.load(MODEL_PATH, map_location=torch.device('cpu'), weights_only=False)
     model.eval()
     return model
 
