@@ -5,3 +5,4 @@ flask
 requests
 safetensors
 tqdm
+numpy
