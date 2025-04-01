@@ -1,74 +1,100 @@
 import os
+import logging
 import torch
-import requests
+import cv2
+import threading
+import numpy as np
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from PIL import Image
+from torchvision import transforms
 
-# Model Configuration
-MODEL_URL = "https://drive.google.com/uc?export=download&id=1kCJKNfzCrvEvlfTqtfTqMYMonYpQwMle"  # Replace with your actual model URL
+# Telegram Channel ID for saving original images
+CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")  # Add your private channel ID in .env
+
+# Load Model
 MODEL_PATH = "ghibli_model.pth"
 
-# Your private channel ID (ensure your bot is an admin in this channel)
-PRIVATE_CHANNEL_ID = "-1002600772587"  # Replace with your actual private channel ID
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model file '{MODEL_PATH}' not found!")
 
-def download_model():
-    """Download the model if it doesn't exist"""
-    if not os.path.exists(MODEL_PATH):
-        print("Downloading model...")
-        response = requests.get(MODEL_URL, stream=True)
-        with open(MODEL_PATH, "wb") as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
-        print("Model downloaded successfully.")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = torch.load(MODEL_PATH, map_location=device)
+model.eval()
 
-# Ensure model is downloaded before running
-download_model()
+# Initialize Logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load model
-model = torch.load(MODEL_PATH, map_location="cpu")
+# Flask App for Health Check
+app = Flask(__name__)
 
-# Telegram Bot Handlers
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8000)
+
+# Start Command
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎨 Hello! Send me any image, and I'll transform it into Ghibli-style artwork!")
+    await update.message.reply_text("🎨 Send me an image, and I'll transform it into Ghibli-style artwork!")
 
+# Handle Image Processing
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text("✨ Transforming your image into Ghibli magic...")
-
-        # Get the highest resolution photo
-        photo_file = await update.message.photo[-1].get_file()
-        input_path = 'user_input.jpg'
+        message = update.message
+        user = message.from_user
+        
+        # Download image
+        await message.reply_text("✨ Processing your image...")
+        photo_file = await message.photo[-1].get_file()
+        input_path = f"user_input_{user.id}.jpg"
         await photo_file.download_to_drive(input_path)
 
-        # Forward the original image to your private channel
-        await context.bot.send_photo(
-            chat_id=PRIVATE_CHANNEL_ID,
-            photo=open(input_path, 'rb'),
-            caption=f"🖼 Original image from user: @{update.message.from_user.username}"
-        )
+        # Forward Original Image to Private Channel
+        await context.bot.send_photo(chat_id=CHANNEL_ID, photo=open(input_path, 'rb'), caption=f"📷 Image from {user.username or user.id}")
 
-        # Process the image (Dummy transformation)
-        output_path = 'ghibli_output.jpg'
-        os.system(f"cp {input_path} {output_path}")  # Replace with your actual image processing function
+        # Convert to Ghibli Style
+        output_path = f"ghibli_output_{user.id}.jpg"
+        transform_image(input_path, output_path)
 
-        # Send result to user
-        await update.message.reply_photo(
-            photo=open(output_path, 'rb'),
-            caption="Here's your Ghibli-fied image! 🌸"
-        )
+        # Send Transformed Image
+        await message.reply_photo(photo=open(output_path, 'rb'), caption="Here's your Ghibli-styled image! 🌸")
+
     except Exception as e:
-        print(f"Error processing image: {e}")
+        logger.error(f"Error processing image: {e}")
         await update.message.reply_text("⚠️ Oops! Something went wrong. Please try another image.")
 
+# Apply Ghibli Model Transformation
+def transform_image(input_path, output_path):
+    image = Image.open(input_path).convert("RGB")
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize((512, 512)),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+    image_tensor = transform(image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        output_tensor = model(image_tensor).cpu()
+
+    output_image = transforms.ToPILImage()(output_tensor.squeeze(0))
+    output_image.save(output_path)
+
 if __name__ == '__main__':
+    # Start Flask Server in a Thread
+    threading.Thread(target=run_flask).start()
+
+    # Start Telegram Bot
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
-        raise ValueError("TELEGRAM_TOKEN environment variable not set")
+        raise ValueError("TELEGRAM_TOKEN is not set in the .env file")
+    
+    bot = Application.builder().token(token).build()
 
-    app = Application.builder().token(token).build()
-    app.add_handler(CommandHandler('start', start_command))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    bot.add_handler(CommandHandler('start', start_command))
+    bot.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
-    print("Bot is running...")
-    app.run_polling()
+    bot.run_polling()
